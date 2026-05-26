@@ -29,7 +29,7 @@
 
 ;;; General
 
-(require 'cl)
+(require 'cl-lib)
 (require 'vc)                           ; vc
 (require 'vc-git)                       ; vc-git advises
 ;;-----------------------------------------------------------------------------
@@ -502,7 +502,7 @@ doing update--state-mark for each buffer."
             (default-directory
               (git--get-top-dir
                 (if repo-or-filelist
-                    (file-name-directory (first repo-or-filelist))
+                    (file-name-directory (car repo-or-filelist))
                   default-directory)))
             (all-relative-names nil))
         (dolist (buffer buffers)

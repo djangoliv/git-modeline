@@ -84,7 +84,7 @@ INFILE. Reeturns git's exit code."
 ;;-----------------------------------------------------------------------------
 
 ;; ewoc file info structure for each list element
-(defstruct (git--fileinfo
+(cl-defstruct (git--fileinfo
             (:copier nil)
             (:constructor git--create-fileinfo
                           (name type &optional sha1 perm marked
@@ -230,7 +230,7 @@ argument)."
                                             absolute-repo
                                             0 absolute-repo-length))
                      (or (not predicate) (funcall predicate buffer)))
-              (add-to-list 'buffers buffer)))))
+              (push 'buffers buffer)))))
     buffers))
 
 (defun git--find-buffers-from-file-list (filelist &optional predicate)
@@ -239,7 +239,7 @@ optionally satisfying the predicate."
   (let (buffers)
     (dolist (filename filelist)
       (let ((buffer (find-buffer-visiting filename predicate)))
-        (when buffer (add-to-list 'buffers buffer))))
+        (when buffer (push 'buffers buffer))))
     buffers))
 
 (defun git--find-buffers (&optional repo-or-filelist predicate)
@@ -286,11 +286,11 @@ if it fails. If the command succeeds, returns the git output."
     ;; trim front
     (while (and (< begin end)
                 (memq (aref str begin) '(? ?\n)))
-      (incf begin))
+      (cl-incf begin))
     ;; trim rear
     (while (and (<= begin end)
                 (memq (aref str end) '(? ?\n)))
-      (decf end))
+      (cl-decf end))
     (substring str begin (+ end 1))))
 
 (defmacro git-in-lowest-existing-dir (dir &rest BODY)
@@ -528,7 +528,7 @@ doing update--state-mark for each buffer."
               (setcdr (gethash (git--fileinfo->name fi) file-index)
                       (git--fileinfo->stat fi)))))
         ;; Now set all stats
-        (maphash #'(lambda (filename buffer-stat)
+        (maphash #'(lambda (buffer-stat)
                      (when (cdr buffer-stat)
                        (with-current-buffer (car buffer-stat)
                          (git--update-state-mark (cdr buffer-stat)))))

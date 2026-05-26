@@ -349,6 +349,10 @@ let the user see the invalid directory error."
 ;; modeline
 ;;---------------------------------------------------------------------------
 
+(defgroup git-emacs nil
+  "Display git status as a mark in the modeline."
+  :group 'vc)
+
 ;; Modeline decoration customization
 (defcustom git-state-modeline-decoration
   'git-state-decoration-large-dot

@@ -56,7 +56,7 @@
 (defsubst git--exec (cmd outbuf infile &rest args)
   "Low level function for calling git. CMD is the main git subcommand, args
 are the remaining args. See `call-process' for the meaning of OUTBUF and
-INFILE. Reeturns git's exit code."
+INFILE. Returns git's exit code."
   (apply #'call-process git--executable infile outbuf nil (cons cmd args)))
 
 (defsubst git--exec-buffer (cmd &rest args)

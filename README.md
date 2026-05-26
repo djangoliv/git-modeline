@@ -17,10 +17,28 @@ colored dot at the beginning of Emacs' modeline.
 
 ## Installation
 
+### Manual
+
 ```elisp
 (add-to-list 'load-path "/path/to/git-modeline")
 (require 'git-modeline)
 (git-modeline-mode 1)
+```
+
+### With [straight.el](https://github.com/radian-software/straight.el)
+
+```elisp
+(straight-use-package
+ '(git-modeline :type git :host github :repo "djangoliv/git-modeline"))
+(git-modeline-mode 1)
+```
+
+Or with `use-package` integration:
+
+```elisp
+(use-package git-modeline
+  :straight (:host github :repo "djangoliv/git-modeline")
+  :config (git-modeline-mode 1))
 ```
 
 Toggle the dot on or off interactively with `M-x git-modeline-mode`.

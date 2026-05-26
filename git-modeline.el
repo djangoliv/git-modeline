@@ -321,7 +321,9 @@ let the user see the invalid directory error."
 (defun git--status-file (file)
   "Return the git status of FILE, as a symbol."
   (let ((fileinfo (git--status-index file)))
-    (unless fileinfo (setq fileinfo (git--ls-files file)))
+    (unless fileinfo
+      (setq fileinfo
+            (git--ls-files "-c" "-o" "--exclude-standard" file)))
     (when (= 1 (length fileinfo))
       (git--fileinfo->stat (car fileinfo)))))
 
@@ -332,13 +334,14 @@ let the user see the invalid directory error."
 (defun git--update-modeline ()
   "Update the current's buffer modeline state display."
   ;; mark depending on the fileinfo state
-  (when (and buffer-file-name (git--in-vc-mode?))
+  (when (git--in-git-repo?)
     (git--update-state-mark
      (git--status-file (file-relative-name buffer-file-name)))))
 
-(defsubst git--in-vc-mode? ()
-  "Returns true if the current buffer is under vc-git."
-  (and vc-mode (string-match "^ Git" (substring-no-properties vc-mode))))
+(defsubst git--in-git-repo? ()
+  "Return non-nil if the current buffer's file lives inside a git repo.
+Unlike a `vc-mode' check, this also matches untracked files."
+  (and buffer-file-name (vc-git-root buffer-file-name)))
 
 ;;;###autoload
 (define-minor-mode git-modeline-mode

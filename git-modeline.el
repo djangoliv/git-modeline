@@ -230,7 +230,7 @@ argument)."
                                             absolute-repo
                                             0 absolute-repo-length))
                      (or (not predicate) (funcall predicate buffer)))
-              (push 'buffers buffer)))))
+              (push buffer buffers)))))
     buffers))
 
 (defun git--find-buffers-from-file-list (filelist &optional predicate)
@@ -239,7 +239,7 @@ optionally satisfying the predicate."
   (let (buffers)
     (dolist (filename filelist)
       (let ((buffer (find-buffer-visiting filename predicate)))
-        (when buffer (push 'buffers buffer))))
+        (when buffer (push buffer buffers))))
     buffers))
 
 (defun git--find-buffers (&optional repo-or-filelist predicate)

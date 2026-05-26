@@ -1,22 +1,49 @@
-git-modeline: display the git status as dot in the modeline
------------------------------------------------------------
+# git-modeline
 
+Display the git status of the file visited by the current buffer as a
+colored dot at the beginning of Emacs' modeline.
 
-The dot in the modeline indicates the state of this source file
+## Color legend
 
-green: uptodate
-gray: unknown
-tomato: modified
-red: deleted
-purple: unmerged
+| Color        | State    | Meaning                                           |
+|--------------|----------|---------------------------------------------------|
+| GreenYellow  | uptodate | Tracked, no local changes                         |
+| tomato       | modified | Tracked with unstaged changes                     |
+| yellow       | staged   | Staged changes ready to commit                    |
+| blue         | added    | New file added to the index                       |
+| red          | deleted  | Removed from the working tree                     |
+| purple       | unmerged | Conflict during merge                             |
+| gray         | unknown  | Untracked file inside a git repo                  |
 
-Installation instruction
-------------------------
+## Installation
 
+```elisp
+(add-to-list 'load-path "/path/to/git-modeline")
+(require 'git-modeline)
+(git-modeline-mode 1)
 ```
-  (add-to-list 'load-path "/path/to/git-modeline")
-  (require 'git-modeline)
-  (git-modeline-mode 1)
-```
 
-Toggle the dot on/off interactively with `M-x git-modeline-mode`.
+Toggle the dot on or off interactively with `M-x git-modeline-mode`.
+
+## Customization
+
+`git-state-modeline-decoration` controls how the state is rendered.
+Pick one with `M-x customize-variable RET git-state-modeline-decoration`:
+
+| Value                                 | Look                             |
+|---------------------------------------|----------------------------------|
+| `git-state-decoration-large-dot`      | large filled dot (default)       |
+| `git-state-decoration-small-dot`      | small filled dot                 |
+| `git-state-decoration-letter`         | single status letter (U/M/A/…)   |
+| `git-state-decoration-colored-letter` | same, colored                    |
+| `nil`                                 | no decoration                    |
+
+You can also set it to any function of one argument (the state symbol)
+that returns a string suitable for `mode-line-format`.
+
+## Requirements
+
+- Emacs with `vc`/`vc-git` (built-in)
+- `git` on `$PATH`
+
+No external Emacs packages.

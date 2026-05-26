@@ -336,14 +336,31 @@ let the user see the invalid directory error."
     (git--update-state-mark
      (git--status-file (file-relative-name buffer-file-name)))))
 
-(advice-add 'vc-after-save :after #'git--update-modeline)
-
-(add-hook 'find-file-hook 'git--update-modeline t)
-
-;; A couple of functions are needed to support autoload on opening a git file.
 (defsubst git--in-vc-mode? ()
   "Returns true if the current buffer is under vc-git."
   (and vc-mode (string-match "^ Git" (substring-no-properties vc-mode))))
+
+;;;###autoload
+(define-minor-mode git-modeline-mode
+  "Toggle display of git status as a colored dot in the modeline.
+When enabled, every buffer visiting a file under git shows a dot
+at the start of `mode-line-format'.  The color reflects the git
+status of the file."
+  :global t
+  :group 'git-emacs
+  (cond
+   (git-modeline-mode
+    (advice-add 'vc-after-save :after #'git--update-modeline)
+    (add-hook 'find-file-hook #'git--update-modeline t)
+    (dolist (buffer (buffer-list))
+      (with-current-buffer buffer
+        (git--update-modeline))))
+   (t
+    (advice-remove 'vc-after-save #'git--update-modeline)
+    (remove-hook 'find-file-hook #'git--update-modeline)
+    (dolist (buffer (buffer-list))
+      (with-current-buffer buffer
+        (git--uninstall-state-mark-modeline))))))
 
 ;;-------------------------------------------------------------------------
 ;; modeline

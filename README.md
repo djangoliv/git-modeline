@@ -16,4 +16,7 @@ Installation instruction
 ```
   (add-to-list 'load-path "/path/to/git-modeline")
   (require 'git-modeline)
+  (git-modeline-mode 1)
 ```
+
+Toggle the dot on/off interactively with `M-x git-modeline-mode`.

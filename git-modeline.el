@@ -37,17 +37,12 @@
 ;;-----------------------------------------------------------------------------
 
 (defvar git--executable "git" "Main git executable")
-(defconst git--reg-space   " ")
 (defconst git--reg-status  "\\([A-Z?]\\)")
-(defconst git--reg-tab     "\t")
 (defconst git--reg-blank   "[\t\0 ]+")
 (defconst git--reg-eof     "\0")
 (defconst git--reg-perm    "\\([0-7]\\{6\\}\\)")
-(defconst git--reg-type    "\\([^ ]+\\)")
 (defconst git--reg-sha1    "\\([0-9a-f]\\{40\\}\\)")
 (defconst git--reg-file    "\\([^\0]+\\)")
-(defconst git--reg-branch  "\\([^\n]+\\)")
-(defconst git--reg-stage   "\\([0-9]+\\)")
 
 ;;-----------------------------------------------------------------------------
 ;; Low-level execution functions.

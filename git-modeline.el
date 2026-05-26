@@ -77,7 +77,7 @@ INFILE. Returns git's exit code."
     (t nil)))
 
 (defsubst git--build-reg (&rest args)
-  (apply #'concat (add-to-list 'args "\0" t)))
+  (apply #'concat (append args (list "\0"))))
 
 ;;-----------------------------------------------------------------------------
 ;; fileinfo structure

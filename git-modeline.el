@@ -336,9 +336,7 @@ let the user see the invalid directory error."
     (git--update-state-mark
      (git--status-file (file-relative-name buffer-file-name)))))
 
-(defadvice vc-after-save (after git--vc-git-after-save activate)
-  "vc-after-save advice for updating status"
-  (when (git--in-vc-mode?) (git--update-modeline)))
+(advice-add 'vc-after-save :after #'git--update-modeline)
 
 (add-hook 'find-file-hook 'git--update-modeline t)
 

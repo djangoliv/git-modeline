@@ -383,7 +383,7 @@ of mode-line-format."
     ('unmerged "purple"      )
     ('uptodate "GreenYellow" )
     ('staged   "yellow"      )
-    (t "red")))
+    (t "gray")))
 
 
 ;; Modeline decoration options

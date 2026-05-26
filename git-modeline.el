@@ -528,7 +528,7 @@ doing update--state-mark for each buffer."
               (setcdr (gethash (git--fileinfo->name fi) file-index)
                       (git--fileinfo->stat fi)))))
         ;; Now set all stats
-        (maphash #'(lambda (buffer-stat)
+        (maphash #'(lambda (_filename buffer-stat)
                      (when (cdr buffer-stat)
                        (with-current-buffer (car buffer-stat)
                          (git--update-state-mark (cdr buffer-stat)))))

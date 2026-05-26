@@ -456,7 +456,10 @@ static char * data[] = {
    'help-echo (git--state-mark-tooltip stat)))
 
 ;; Modeline decoration implementation
-(defvar git--state-mark-modeline t)     ; marker for our entry in mode-line-fmt
+(defvar git--state-mark-modeline t
+  "Marker symbol for our entry in `mode-line-format'.
+Must remain non-nil: `mode-line-format' evaluates each `(SYMBOL . VALUE)'
+cell and only renders VALUE when SYMBOL's value is non-nil.")
 
 (defun git--state-mark-modeline-dot (color stat img)
   (propertize "    "

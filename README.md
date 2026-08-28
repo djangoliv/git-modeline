@@ -15,6 +15,12 @@ colored dot at the beginning of Emacs' modeline.
 | purple       | unmerged | Conflict during merge                             |
 | gray         | unknown  | Untracked file inside a git repo                  |
 
+Each state has its own face — `git-modeline-uptodate`,
+`git-modeline-modified`, `git-modeline-staged`, `git-modeline-added`,
+`git-modeline-deleted`, `git-modeline-unmerged`, `git-modeline-unknown` —
+so a theme or `M-x customize-face` can override the colors above. The
+foreground of the face fills the dot as well as the letter.
+
 ## Installation
 
 ### Manual

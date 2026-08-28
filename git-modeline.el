@@ -242,17 +242,59 @@ added at the beginning of `mode-line-format'."
   :group 'git-modeline
 )
 
-(defun git-modeline--interpret-state-mode-color (stat)
-  "Return a mode line status color appropriate for STAT (a state symbol)."
+(defface git-modeline-uptodate
+  '((t :foreground "GreenYellow"))
+  "Face for a tracked file with no local change."
+  :group 'git-modeline)
+
+(defface git-modeline-modified
+  '((t :foreground "tomato"))
+  "Face for a tracked file with unstaged changes."
+  :group 'git-modeline)
+
+(defface git-modeline-staged
+  '((t :foreground "yellow"))
+  "Face for a file with staged changes."
+  :group 'git-modeline)
+
+(defface git-modeline-added
+  '((t :foreground "blue"))
+  "Face for a new file added to the index."
+  :group 'git-modeline)
+
+(defface git-modeline-deleted
+  '((t :foreground "red"))
+  "Face for a file removed from the working tree."
+  :group 'git-modeline)
+
+(defface git-modeline-unmerged
+  '((t :foreground "purple"))
+  "Face for a file with a merge conflict."
+  :group 'git-modeline)
+
+(defface git-modeline-unknown
+  '((t :foreground "gray"))
+  "Face for an untracked file, and for any unrecognized state."
+  :group 'git-modeline)
+
+(defun git-modeline--interpret-state-mode-face (stat)
+  "Return the face used to render the state symbol STAT."
   (cl-case stat
-    (modified  "tomato"      )
-    (unknown   "gray"        )
-    (added     "blue"        )
-    (deleted   "red"         )
-    (unmerged  "purple"      )
-    (uptodate  "GreenYellow" )
-    (staged    "yellow"      )
-    (t "gray")))
+    (modified  'git-modeline-modified )
+    (unknown   'git-modeline-unknown  )
+    (added     'git-modeline-added    )
+    (deleted   'git-modeline-deleted  )
+    (unmerged  'git-modeline-unmerged )
+    (uptodate  'git-modeline-uptodate )
+    (staged    'git-modeline-staged   )
+    (t         'git-modeline-unknown  )))
+
+(defun git-modeline--interpret-state-mode-color (stat)
+  "Return a mode line status color appropriate for STAT (a state symbol).
+The color is the foreground of the face matching STAT, so that themes
+can override it.  Used to fill the XPM dot, which needs a color string."
+  (or (face-foreground (git-modeline--interpret-state-mode-face stat) nil t)
+      "gray"))
 
 
 ;; Modeline decoration options
@@ -326,7 +368,7 @@ static char * data[] = {
    (concat
     (propertize
      (git-modeline--interpret-state-mode-letter stat)
-     'face (list ':foreground (git-modeline--interpret-state-mode-color stat)))
+     'face (git-modeline--interpret-state-mode-face stat))
     " ")
    'help-echo (git-modeline--state-mark-tooltip stat)))
 

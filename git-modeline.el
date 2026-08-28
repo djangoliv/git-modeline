@@ -49,13 +49,14 @@
 ;;-----------------------------------------------------------------------------
 
 (defsubst git--exec (cmd outbuf infile &rest args)
-  "Low level function for calling git. CMD is the main git subcommand, args
-are the remaining args. See `call-process' for the meaning of OUTBUF and
-INFILE. Returns git's exit code."
+  "Low level function for calling git.
+CMD is the main git subcommand, ARGS are the remaining args.  See
+`call-process' for the meaning of OUTBUF and INFILE.  Returns git's
+exit code."
   (apply #'call-process git--executable infile outbuf nil (cons cmd args)))
 
 (defsubst git--exec-buffer (cmd &rest args)
-  "Execute 'git' within the buffer. Return the exit code."
+  "Execute \\='git\\=' within the buffer.  Return the exit code."
   (apply #'git--exec cmd t nil args))
 
 (defsubst git--interpret-to-state-symbol (stat)
@@ -134,7 +135,7 @@ properly expanded tree."
                  (git--fileinfo->name info2))))))
 
 (defun git--status-index (&rest files)
-  "Execute 'git-status-index' and return list of 'git--fileinfo'"
+  "Execute \\='git-status-index\\=' and return a list of `git--fileinfo'."
 
   ;; update fileinfo -> unmerged index
   (let ((fileinfo nil)
@@ -177,16 +178,16 @@ properly expanded tree."
     fileinfo))
 
 (defsubst git--diff-raw (args &rest files)
-  "Execute 'git diff --raw' with 'args' and 'files' at current buffer. This
-gives, essentially, file status."
+  "Execute \\='git diff --raw\\=' with ARGS and FILES at current buffer.
+This gives, essentially, file status."
   ;; git-diff abbreviates by default, and also produces a diff.
   (apply #'git--exec-buffer "diff" "-z" "--full-index" "--raw" "--abbrev=40"
          (append args (list "--") files)))
 
 (defun git--ls-files (&rest args)
-  "Execute 'git-ls-files' with 'args' and return the list of the
-'git--fileinfo'. Does not differentiate between 'modified and
-'staged."
+  "Execute \\='git-ls-files\\=' with ARGS and return the list of
+`git--fileinfo'.  Does not differentiate between `modified' and
+`staged'."
 
   (let (fileinfo)
     (with-temp-buffer
@@ -227,17 +228,17 @@ gives, essentially, file status."
 ;; vc-git integration
 ;;-----------------------------------------------------------------------------
 
+(defsubst git--in-git-repo? ()
+  "Return non-nil if the current buffer's file lives inside a git repo.
+Unlike a `vc-mode' check, this also matches untracked files."
+  (and buffer-file-name (vc-git-root buffer-file-name)))
+
 (defun git--update-modeline ()
   "Update the current's buffer modeline state display."
   ;; mark depending on the fileinfo state
   (when (git--in-git-repo?)
     (git--update-state-mark
      (git--status-file (file-relative-name buffer-file-name)))))
-
-(defsubst git--in-git-repo? ()
-  "Return non-nil if the current buffer's file lives inside a git repo.
-Unlike a `vc-mode' check, this also matches untracked files."
-  (and buffer-file-name (vc-git-root buffer-file-name)))
 
 ;;;###autoload
 (define-minor-mode git-modeline-mode
@@ -272,10 +273,10 @@ status of the file."
 ;; Modeline decoration customization
 (defcustom git-state-modeline-decoration
   'git-state-decoration-large-dot
-  "How to indicate the status of files in the modeline. The value
-must be a function that takes a single arg: a symbol denoting file status,
-e.g. 'unmerged. The return value of the function will be added at the beginning
-of mode-line-format."
+  "How to indicate the status of files in the modeline.
+The value must be a function that takes a single arg: a symbol denoting
+file status, e.g. `unmerged'.  The return value of the function will be
+added at the beginning of `mode-line-format'."
   :type '(choice (function-item :tag "Small colored dot"
                                 git-state-decoration-small-dot)
                  (function-item :tag "Large colored dot"
@@ -292,13 +293,13 @@ of mode-line-format."
 (defun git--interpret-state-mode-color (stat)
   "Return a mode line status color appropriate for STAT (a state symbol)."
   (cl-case stat
-    ('modified "tomato"      )
-    ('unknown  "gray"        )
-    ('added    "blue"        )
-    ('deleted  "red"         )
-    ('unmerged "purple"      )
-    ('uptodate "GreenYellow" )
-    ('staged   "yellow"      )
+    (modified  "tomato"      )
+    (unknown   "gray"        )
+    (added     "blue"        )
+    (deleted   "red"         )
+    (unmerged  "purple"      )
+    (uptodate  "GreenYellow" )
+    (staged    "yellow"      )
     (t "gray")))
 
 
@@ -345,13 +346,13 @@ static char * data[] = {
 
 (defun git--interpret-state-mode-letter(stat)
    (cl-case stat
-     ('modified "M")
-     ('unknown  "?")
-     ('added    "A")
-     ('deleted  "D")
-     ('unmerged "!")
-     ('uptodate "U")
-     ('staged   "S")
+     (modified  "M")
+     (unknown   "?")
+     (added     "A")
+     (deleted   "D")
+     (unmerged  "!")
+     (uptodate  "U")
+     (staged    "S")
      (t "")))
 
 (defsubst git--state-mark-tooltip(stat)

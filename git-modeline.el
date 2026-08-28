@@ -58,6 +58,11 @@
 (require 'cl-lib)
 (require 'vc)                           ; vc
 (require 'vc-git)                       ; vc-git advises
+(require 'subr-x)                       ; string-trim
+
+(declare-function file-notify-add-watch "filenotify" (file flags callback))
+(declare-function file-notify-rm-watch "filenotify" (descriptor))
+(defvar magit-post-refresh-hook)
 
 (defgroup git-modeline nil
   "Display git status as a mark in the modeline."
@@ -191,10 +196,104 @@ Unlike a `vc-mode' check, this also matches untracked files."
 
 (defun git-modeline--update ()
   "Update the current's buffer modeline state display."
-  ;; mark depending on the fileinfo state
-  (when (git-modeline--in-repo-p)
-    (git-modeline--update-state-mark
-     (git-modeline--status-file (file-relative-name buffer-file-name)))))
+  (let ((root (git-modeline--in-repo-p)))
+    (when root
+      (git-modeline--watch-repository root)
+      (git-modeline--update-state-mark
+       (git-modeline--status-file (file-relative-name buffer-file-name))))))
+
+;;-----------------------------------------------------------------------------
+;; Refresh on external changes
+;;-----------------------------------------------------------------------------
+
+(defcustom git-modeline-watch-index t
+  "Whether to watch each repository index for changes made outside Emacs.
+When non-nil, a file notification watch on the git directory refreshes
+the mark after e.g. a `git add\=' or a commit run from a terminal.  Set
+to nil to rely only on `find-file\=', saving and
+`git-modeline-refresh\='."
+  :type 'boolean
+  :group 'git-modeline)
+
+(defcustom git-modeline-refresh-delay 0.5
+  "Seconds to wait before refreshing after the git index changed.
+A single git operation writes the index several times; waiting coalesces
+those writes into one refresh."
+  :type 'number
+  :group 'git-modeline)
+
+(defvar git-modeline--watchers (make-hash-table :test 'equal)
+  "Hash table mapping a repository root to its file notification watch.")
+
+(defvar git-modeline--refresh-timer nil
+  "Timer coalescing the refreshes triggered by index changes.")
+
+(defun git-modeline-refresh (&optional root)
+  "Refresh the mark of every buffer visiting a file under ROOT.
+With ROOT nil, refresh every buffer visiting a file."
+  (interactive)
+  (dolist (buffer (buffer-list))
+    (with-current-buffer buffer
+      (when (and buffer-file-name
+                 (or (null root) (file-in-directory-p buffer-file-name root)))
+        (git-modeline--update)))))
+
+(defun git-modeline--schedule-refresh (root)
+  "Refresh the buffers under ROOT once Emacs has been idle a moment."
+  (when (timerp git-modeline--refresh-timer)
+    (cancel-timer git-modeline--refresh-timer))
+  (setq git-modeline--refresh-timer
+        (run-with-idle-timer git-modeline-refresh-delay nil
+                             #'git-modeline-refresh root)))
+
+(defun git-modeline--index-event-p (event)
+  "Return non-nil if file notification EVENT touches the git index."
+  (let ((action (nth 1 event))
+        (file (nth 2 event)))
+    (and (memq action '(created changed renamed attribute-changed))
+         (member (file-name-nondirectory file) '("index" "HEAD")))))
+
+(defun git-modeline--git-dir (root)
+  "Return the absolute git directory of the repository at ROOT, or nil.
+ROOT may be a worktree or a submodule, whose \=`.git\=' is a file."
+  (with-temp-buffer
+    (let ((default-directory root))
+      (when (zerop (git-modeline--exec-buffer "rev-parse" "--absolute-git-dir"))
+        (let ((dir (string-trim (buffer-string))))
+          (and (file-directory-p dir) dir))))))
+
+(defun git-modeline--watch-repository (root)
+  "Watch the git directory of the repository at ROOT for index changes.
+Do nothing if ROOT is already watched, or if this Emacs has no file
+notification support."
+  (when (and git-modeline-watch-index
+             ;; A nil value means "tried, and no watch could be set": keep it,
+             ;; so that we do not run rev-parse again for that repository.
+             (eq 'missing (gethash root git-modeline--watchers 'missing))
+             (require 'filenotify nil t))
+    (let ((git-dir (git-modeline--git-dir root)))
+      (when git-dir
+        ;; Watch the directory rather than the index itself: git replaces
+        ;; the index by renaming index.lock over it, which would drop a
+        ;; watch set on the file.
+        (puthash root
+                 (ignore-errors
+                   (file-notify-add-watch
+                    git-dir '(change)
+                    (lambda (event)
+                      (when (git-modeline--index-event-p event)
+                        (git-modeline--schedule-refresh root)))))
+                 git-modeline--watchers)))))
+
+(defun git-modeline--unwatch-all ()
+  "Stop watching every repository and cancel any pending refresh."
+  (when (timerp git-modeline--refresh-timer)
+    (cancel-timer git-modeline--refresh-timer)
+    (setq git-modeline--refresh-timer nil))
+  (maphash (lambda (_root descriptor)
+             (when descriptor (ignore-errors (file-notify-rm-watch descriptor))))
+           git-modeline--watchers)
+  (clrhash git-modeline--watchers))
 
 ;;;###autoload
 (define-minor-mode git-modeline-mode
@@ -207,13 +306,19 @@ status of the file."
   (cond
    (git-modeline-mode
     (advice-add 'vc-after-save :after #'git-modeline--update)
+    (advice-add 'vc-refresh-state :after #'git-modeline--update)
     (add-hook 'find-file-hook #'git-modeline--update t)
-    (dolist (buffer (buffer-list))
-      (with-current-buffer buffer
-        (git-modeline--update))))
+    (add-hook 'after-revert-hook #'git-modeline--update)
+    ;; Magit knows when it changed the index; ask it to tell us.
+    (add-hook 'magit-post-refresh-hook #'git-modeline-refresh)
+    (git-modeline-refresh))
    (t
     (advice-remove 'vc-after-save #'git-modeline--update)
+    (advice-remove 'vc-refresh-state #'git-modeline--update)
     (remove-hook 'find-file-hook #'git-modeline--update)
+    (remove-hook 'after-revert-hook #'git-modeline--update)
+    (remove-hook 'magit-post-refresh-hook #'git-modeline-refresh)
+    (git-modeline--unwatch-all)
     (dolist (buffer (buffer-list))
       (with-current-buffer buffer
         (git-modeline--uninstall-state-mark))))))

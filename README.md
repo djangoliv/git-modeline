@@ -49,6 +49,21 @@ Or with `use-package` integration:
 
 Toggle the dot on or off interactively with `M-x git-modeline-mode`.
 
+## Refreshing
+
+The mark is refreshed when a file is visited, when it is saved or
+reverted, and on `M-x vc-refresh-state`. Changes made outside the buffer
+are picked up too:
+
+- a file notification watch on each repository's git directory catches a
+  `git add`, `git reset` or commit run from a terminal;
+- `magit-post-refresh-hook` catches the same operations run from Magit.
+
+Set `git-modeline-watch-index` to nil to disable the watches, and
+`git-modeline-refresh-delay` to change how long index writes are
+coalesced (0.5s by default). `M-x git-modeline-refresh` refreshes every
+buffer by hand.
+
 ## Customization
 
 `git-modeline-decoration` controls how the state is rendered.

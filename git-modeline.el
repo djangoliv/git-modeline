@@ -1,10 +1,14 @@
-;;; git-modeline.el --- display git status as mark in modeline -*- lexical-binding: t -*-
+;;; git-modeline.el --- Show the git status of the current file in the modeline -*- lexical-binding: t -*-
 
 ;; Copyright (C) 2022 xl666
+;; Copyright (C) 2022-2026 djangoliv
 
-;; Author: djangoliv (ogiorgis)
+;; Author: djangoliv <olivier.giorgis@quantstack.net>
+;; Maintainer: djangoliv <olivier.giorgis@quantstack.net>
 ;; URL: https://github.com/djangoliv/git-modeline
 ;; Version: 0.1
+;; Package-Requires: ((emacs "26.1"))
+;; Keywords: vc, tools, convenience
 
 ;; This file is NOT part of GNU Emacs.
 
@@ -21,9 +25,31 @@
 ;; For a full copy of the GNU General Public License
 ;; see <http://www.gnu.org/licenses/>.
 
-
 ;;; Commentary:
-;; Add a dot in the modeline that indicates the state of the source file.
+
+;; `git-modeline-mode' is a global minor mode that prepends a colored
+;; mark to `mode-line-format' in every buffer visiting a file tracked
+;; by, or living inside, a git repository.  The color of the mark tells
+;; the git status of that file at a glance:
+;;
+;;   GreenYellow  up to date        yellow  staged
+;;   tomato       modified          blue    added
+;;   red          deleted           purple  unmerged
+;;   gray         untracked
+;;
+;; Usage:
+;;
+;;   (require 'git-modeline)
+;;   (git-modeline-mode 1)
+;;
+;; The mark is refreshed when a file is visited and after each save.
+;; `git-modeline-decoration' selects how it is drawn: a large dot (the
+;; default), a small dot, a status letter, a colored status letter, or
+;; any function of one argument returning a mode-line construct.
+;;
+;; The status collection code is derived from git-emacs
+;; (https://github.com/tsgates/git-emacs), reduced to what the modeline
+;; display needs.
 
 ;;; Code:
 
@@ -32,35 +58,42 @@
 (require 'cl-lib)
 (require 'vc)                           ; vc
 (require 'vc-git)                       ; vc-git advises
+
+(defgroup git-modeline nil
+  "Display git status as a mark in the modeline."
+  :group 'vc
+  :prefix "git-modeline-")
+
 ;;-----------------------------------------------------------------------------
 ;; Internal variables.
 ;;-----------------------------------------------------------------------------
 
-(defvar git--executable "git" "Main git executable")
-(defconst git--reg-status  "\\([A-Z?]\\)")
-(defconst git--reg-blank   "[\t\0 ]+")
-(defconst git--reg-eof     "\0")
-(defconst git--reg-perm    "\\([0-7]\\{6\\}\\)")
-(defconst git--reg-sha1    "\\([0-9a-f]\\{40\\}\\)")
-(defconst git--reg-file    "\\([^\0]+\\)")
+(defvar git-modeline-executable "git" "Name of, or path to, the git executable.")
+(defconst git-modeline--reg-status  "\\([A-Z?]\\)")
+(defconst git-modeline--reg-blank   "[\t\0 ]+")
+(defconst git-modeline--reg-eof     "\0")
+(defconst git-modeline--reg-perm    "\\([0-7]\\{6\\}\\)")
+(defconst git-modeline--reg-sha1    "\\([0-9a-f]\\{40\\}\\)")
+(defconst git-modeline--reg-file    "\\([^\0]+\\)")
 
 ;;-----------------------------------------------------------------------------
 ;; Low-level execution functions.
 ;;-----------------------------------------------------------------------------
 
-(defsubst git--exec (cmd outbuf infile &rest args)
+(defsubst git-modeline--exec (cmd outbuf infile &rest args)
   "Low level function for calling git.
 CMD is the main git subcommand, ARGS are the remaining args.  See
 `call-process' for the meaning of OUTBUF and INFILE.  Returns git's
 exit code."
-  (apply #'call-process git--executable infile outbuf nil (cons cmd args)))
+  (apply #'call-process git-modeline-executable infile outbuf nil (cons cmd args)))
 
-(defsubst git--exec-buffer (cmd &rest args)
-  "Execute \\='git\\=' within the buffer.  Return the exit code."
-  (apply #'git--exec cmd t nil args))
+(defsubst git-modeline--exec-buffer (cmd &rest args)
+  "Run git subcommand CMD with ARGS in the current buffer.
+Return the exit code."
+  (apply #'git-modeline--exec cmd t nil args))
 
-(defsubst git--interpret-to-state-symbol (stat)
-  "Interpret a one-letter git state string to our state symbols."
+(defsubst git-modeline--interpret-to-state-symbol (stat)
+  "Interpret STAT, a one-letter git state string, as a state symbol."
   (cl-case (string-to-char stat)
     (?H 'uptodate )
     (?M 'modified )
@@ -72,173 +105,96 @@ exit code."
     (?K 'killed   )
     (t nil)))
 
-(defsubst git--build-reg (&rest args)
+(defsubst git-modeline--build-reg (&rest args)
+  "Concatenate ARGS into a regexp matching one NUL-terminated record."
   (apply #'concat (append args (list "\0"))))
 
-;;-----------------------------------------------------------------------------
-;; fileinfo structure
-;;-----------------------------------------------------------------------------
+(defun git-modeline--status-index (&rest files)
+  "Return the index status of FILES as a list of state symbols."
 
-;; ewoc file info structure for each list element
-(cl-defstruct (git--fileinfo
-            (:copier nil)
-            (:constructor git--create-fileinfo
-                          (name type &optional sha1 perm marked
-                                               stat size refresh))
-            (:conc-name git--fileinfo->))
-  marked   ;; t/nil
-  expanded ;; t/nil
-  refresh  ;; t/nil
-  stat     ;; 'unknown/'modified/'uptodate/'staged  etc.
-  type     ;; 'blob/'tree/'commit (i.e. submodule)
-  name     ;; filename
-  size     ;; size
-  perm     ;; permission
-  sha1)    ;; sha1
-
-(defsubst git--fileinfo-is-dir (info)
-  "Returns true if a file info is directory-like (expandable, sorted first)"
-  (not (eq 'blob (git--fileinfo->type info))))
-
-(defsubst git--fileinfo-dir (info)
-  "Returns the directory component of a fileinfo's path. If the fileinfo is
-directory-like, the directory is the path itself, with a slash appended."
-  (if (git--fileinfo-is-dir info)
-      (file-name-as-directory (git--fileinfo->name info))
-    (or (file-name-directory (git--fileinfo->name info)) "")))
-
-(defun git--fileinfo-lessp (info1 info2)
-  "Sorting rule for git--fileinfos, such that the ordering in git-status is
-right. The rule is rather complicated, but it basically results in a
-properly expanded tree."
-  (let ((info1-dir (git--fileinfo-dir info1))
-        (info2-dir (git--fileinfo-dir info2)))
-    (let ((cmp (compare-strings info1-dir 0 nil info2-dir 0 nil)))
-      (if (not (eq t cmp))
-          ;; A file in a subdirectory should always come before a file
-          ;; in the parent directory.
-          (if (< cmp 0)
-              ;; info1-dir < info2-dir
-              (if (eq (length info1-dir) (- -1 cmp))
-                  ;; info1-dir is a subdir of info2-dir. less == false,
-                  ;; unless info1 is a directory itself.
-                  (git--fileinfo-is-dir info1)
-                t)
-            ;; info1-dir > info2-dir
-            (if (eq (length info2-dir) (- cmp 1))
-                ;; info2-dir is a subdir of info1-dir. less == true, unless
-                ;; info2 is a directory itself.
-                (not (git--fileinfo-is-dir info2))
-              nil))
-        ;; same directory, straight-up comparison
-        (string< (git--fileinfo->name info1)
-                 (git--fileinfo->name info2))))))
-
-(defun git--status-index (&rest files)
-  "Execute \\='git-status-index\\=' and return a list of `git--fileinfo'."
-
-  ;; update fileinfo -> unmerged index
-  (let ((fileinfo nil)
-        (unmerged-info (make-hash-table :test 'equal))
-        (regexp (git--build-reg ":"
-                                git--reg-perm    ; matched-1: HEAD perms
-                                git--reg-blank
-                                git--reg-perm    ; matched-2: index perms
-                                git--reg-blank
-                                git--reg-sha1    ; matched-3: HEAD sha1
-                                git--reg-blank
-                                git--reg-sha1    ; matched-4: index sha1
-                                git--reg-blank
-                                git--reg-status  ; matched-5
-                                git--reg-eof
-                                git--reg-file    ; matched-6
+  (let ((states nil)
+        (regexp (git-modeline--build-reg ":"
+                                git-modeline--reg-perm    ; matched-1: HEAD perms
+                                git-modeline--reg-blank
+                                git-modeline--reg-perm    ; matched-2: index perms
+                                git-modeline--reg-blank
+                                git-modeline--reg-sha1    ; matched-3: HEAD sha1
+                                git-modeline--reg-blank
+                                git-modeline--reg-sha1    ; matched-4: index sha1
+                                git-modeline--reg-blank
+                                git-modeline--reg-status  ; matched-5
+                                git-modeline--reg-eof
+                                git-modeline--reg-file    ; matched-6
                                 )))
 
     (with-temp-buffer
-      (apply #'git--diff-raw (list "HEAD") files)
+      (apply #'git-modeline--diff-raw (list "HEAD") files)
 
       (goto-char (point-min))
 
       (while (re-search-forward regexp nil t)
-        (let ((perm (match-string 2))
-              (stat (git--interpret-to-state-symbol (match-string 5)))
-              (file (match-string 6)))
-
-          ;; if unmerged file
-          (when (gethash file unmerged-info) (setq stat 'unmerged))
+        (let ((stat (git-modeline--interpret-to-state-symbol (match-string 5))))
           ;; modified vs. staged: the latter has a nonzero sha1
           (when (and (eq stat 'modified)
                      (not (equal (match-string 4)
                                  "0000000000000000000000000000000000000000")))
             (setq stat 'staged))
+          (push stat states))))
 
-          ;; assume all listed elements are 'blob
-          (push (git--create-fileinfo file 'blob nil perm nil stat) fileinfo))))
+    states))
 
-    fileinfo))
-
-(defsubst git--diff-raw (args &rest files)
+(defsubst git-modeline--diff-raw (args &rest files)
   "Execute \\='git diff --raw\\=' with ARGS and FILES at current buffer.
 This gives, essentially, file status."
   ;; git-diff abbreviates by default, and also produces a diff.
-  (apply #'git--exec-buffer "diff" "-z" "--full-index" "--raw" "--abbrev=40"
+  (apply #'git-modeline--exec-buffer "diff" "-z" "--full-index" "--raw" "--abbrev=40"
          (append args (list "--") files)))
 
-(defun git--ls-files (&rest args)
-  "Execute \\='git-ls-files\\=' with ARGS and return the list of
-`git--fileinfo'.  Does not differentiate between `modified' and
-`staged'."
-
-  (let (fileinfo)
+(defun git-modeline--ls-files (&rest args)
+  "Run \\='git ls-files\\=' with ARGS, returning a list of state symbols.
+Does not differentiate between `modified' and `staged'."
+  (let (states)
     (with-temp-buffer
-      (apply #'git--exec-buffer "ls-files" "-t" "-z" args)
+      (apply #'git-modeline--exec-buffer "ls-files" "-t" "-z" args)
       (goto-char (point-min))
 
-      (let ((regexp (git--build-reg git--reg-status ; matched-1
-                                    git--reg-blank
-                                    git--reg-file))) ; matched-2
+      (let ((regexp (git-modeline--build-reg git-modeline--reg-status ; matched-1
+                                    git-modeline--reg-blank
+                                    git-modeline--reg-file))) ; matched-2
 
         (while (re-search-forward regexp nil t)
-          (let* ((stat (match-string 1))
-                 (name (match-string 2))
-                 (file-name (directory-file-name name)))
-            ;; Files listed with e.g "-o" might be directories
-            (push (git--create-fileinfo file-name
-                                        (if (equal name file-name) 'blob
-                                          'tree)
-                                        nil nil nil
-                                        (git--interpret-to-state-symbol stat))
-                  fileinfo)))))
-    (sort fileinfo 'git--fileinfo-lessp)))
+          (push (git-modeline--interpret-to-state-symbol (match-string 1))
+                states))))
+    states))
 
 ;;-----------------------------------------------------------------------------
 ;; git application
 ;;-----------------------------------------------------------------------------
 
-(defun git--status-file (file)
-  "Return the git status of FILE, as a symbol."
-  (let ((fileinfo (git--status-index file)))
-    (unless fileinfo
-      (setq fileinfo
-            (git--ls-files "-c" "-o" "--exclude-standard" file)))
-    (when (= 1 (length fileinfo))
-      (git--fileinfo->stat (car fileinfo)))))
+(defun git-modeline--status-file (file)
+  "Return the git status of FILE, as a state symbol."
+  (let ((states (git-modeline--status-index file)))
+    (unless states
+      (setq states
+            (git-modeline--ls-files "-c" "-o" "--exclude-standard" file)))
+    (when (= 1 (length states))
+      (car states))))
 
 ;;-----------------------------------------------------------------------------
 ;; vc-git integration
 ;;-----------------------------------------------------------------------------
 
-(defsubst git--in-git-repo? ()
+(defsubst git-modeline--in-repo-p ()
   "Return non-nil if the current buffer's file lives inside a git repo.
 Unlike a `vc-mode' check, this also matches untracked files."
   (and buffer-file-name (vc-git-root buffer-file-name)))
 
-(defun git--update-modeline ()
+(defun git-modeline--update ()
   "Update the current's buffer modeline state display."
   ;; mark depending on the fileinfo state
-  (when (git--in-git-repo?)
-    (git--update-state-mark
-     (git--status-file (file-relative-name buffer-file-name)))))
+  (when (git-modeline--in-repo-p)
+    (git-modeline--update-state-mark
+     (git-modeline--status-file (file-relative-name buffer-file-name)))))
 
 ;;;###autoload
 (define-minor-mode git-modeline-mode
@@ -247,50 +203,46 @@ When enabled, every buffer visiting a file under git shows a dot
 at the start of `mode-line-format'.  The color reflects the git
 status of the file."
   :global t
-  :group 'git-emacs
+  :group 'git-modeline
   (cond
    (git-modeline-mode
-    (advice-add 'vc-after-save :after #'git--update-modeline)
-    (add-hook 'find-file-hook #'git--update-modeline t)
+    (advice-add 'vc-after-save :after #'git-modeline--update)
+    (add-hook 'find-file-hook #'git-modeline--update t)
     (dolist (buffer (buffer-list))
       (with-current-buffer buffer
-        (git--update-modeline))))
+        (git-modeline--update))))
    (t
-    (advice-remove 'vc-after-save #'git--update-modeline)
-    (remove-hook 'find-file-hook #'git--update-modeline)
+    (advice-remove 'vc-after-save #'git-modeline--update)
+    (remove-hook 'find-file-hook #'git-modeline--update)
     (dolist (buffer (buffer-list))
       (with-current-buffer buffer
-        (git--uninstall-state-mark-modeline))))))
+        (git-modeline--uninstall-state-mark))))))
 
 ;;-------------------------------------------------------------------------
 ;; modeline
 ;;---------------------------------------------------------------------------
 
-(defgroup git-emacs nil
-  "Display git status as a mark in the modeline."
-  :group 'vc)
-
 ;; Modeline decoration customization
-(defcustom git-state-modeline-decoration
-  'git-state-decoration-large-dot
+(defcustom git-modeline-decoration
+  'git-modeline-decoration-large-dot
   "How to indicate the status of files in the modeline.
 The value must be a function that takes a single arg: a symbol denoting
 file status, e.g. `unmerged'.  The return value of the function will be
 added at the beginning of `mode-line-format'."
   :type '(choice (function-item :tag "Small colored dot"
-                                git-state-decoration-small-dot)
+                                git-modeline-decoration-small-dot)
                  (function-item :tag "Large colored dot"
-                                git-state-decoration-large-dot)
+                                git-modeline-decoration-large-dot)
                  (function-item :tag "Status letter"
-                                git-state-decoration-letter)
+                                git-modeline-decoration-letter)
                  (function-item :tag "Colored status letter"
-                                git-state-decoration-colored-letter)
+                                git-modeline-decoration-colored-letter)
                  (const :tag "No decoration" nil)
                  (function :tag "Other"))
-  :group 'git-emacs
+  :group 'git-modeline
 )
 
-(defun git--interpret-state-mode-color (stat)
+(defun git-modeline--interpret-state-mode-color (stat)
   "Return a mode line status color appropriate for STAT (a state symbol)."
   (cl-case stat
     (modified  "tomato"      )
@@ -304,9 +256,10 @@ added at the beginning of `mode-line-format'."
 
 
 ;; Modeline decoration options
-(defun git-state-decoration-small-dot(stat)
-  (git--state-mark-modeline-dot
-   (git--interpret-state-mode-color stat) stat
+(defun git-modeline-decoration-small-dot (stat)
+  "Return a small colored dot for the state symbol STAT."
+  (git-modeline--state-mark-dot
+   (git-modeline--interpret-state-mode-color stat) stat
 "/* XPM */
 static char * data[] = {
 \"14 7 3 1\",
@@ -321,9 +274,10 @@ static char * data[] = {
 \"     +...+    \",
 \"      +++     \"};"))
 
-(defun git-state-decoration-large-dot(stat)
-  (git--state-mark-modeline-dot
-   (git--interpret-state-mode-color stat) stat
+(defun git-modeline-decoration-large-dot (stat)
+  "Return a large colored dot for the state symbol STAT."
+  (git-modeline--state-mark-dot
+   (git-modeline--interpret-state-mode-color stat) stat
 "/* XPM */
 static char * data[] = {
 \"18 13 3 1\",
@@ -344,7 +298,8 @@ static char * data[] = {
 \"       +++++      \",
 \"                  \"};"))
 
-(defun git--interpret-state-mode-letter(stat)
+(defun git-modeline--interpret-state-mode-letter (stat)
+  "Return the one-letter mode line abbreviation for the state symbol STAT."
    (cl-case stat
      (modified  "M")
      (unknown   "?")
@@ -355,58 +310,69 @@ static char * data[] = {
      (staged    "S")
      (t "")))
 
-(defsubst git--state-mark-tooltip(stat)
+(defsubst git-modeline--state-mark-tooltip (stat)
+  "Return the tooltip text describing the state symbol STAT."
   (format "File status in git: %s" stat))
 
-(defun git-state-decoration-letter(stat)
+(defun git-modeline-decoration-letter (stat)
+  "Return the status letter for the state symbol STAT."
   (propertize
-   (concat (git--interpret-state-mode-letter stat) " ")
-   'help-echo (git--state-mark-tooltip stat)))
+   (concat (git-modeline--interpret-state-mode-letter stat) " ")
+   'help-echo (git-modeline--state-mark-tooltip stat)))
 
-(defun git-state-decoration-colored-letter(stat)
+(defun git-modeline-decoration-colored-letter (stat)
+  "Return the status letter for the state symbol STAT, colored."
   (propertize
-   (concat 
-    (propertize 
-     (git--interpret-state-mode-letter stat)
-     'face (list ':foreground (git--interpret-state-mode-color stat)))
+   (concat
+    (propertize
+     (git-modeline--interpret-state-mode-letter stat)
+     'face (list ':foreground (git-modeline--interpret-state-mode-color stat)))
     " ")
-   'help-echo (git--state-mark-tooltip stat)))
+   'help-echo (git-modeline--state-mark-tooltip stat)))
 
 ;; Modeline decoration implementation
-(defvar git--state-mark-modeline t
+(defvar git-modeline--state-mark t
   "Marker symbol for our entry in `mode-line-format'.
 Must remain non-nil: `mode-line-format' evaluates each `(SYMBOL . VALUE)'
 cell and only renders VALUE when SYMBOL's value is non-nil.")
 
-(defun git--state-mark-modeline-dot (color stat img)
+(defun git-modeline--state-mark-dot (color stat img)
+  "Return a mode line image built from the XPM template IMG.
+COLOR fills the dot and STAT is used for the tooltip."
   (propertize "    "
-              'help-echo (git--state-mark-tooltip stat)
+              'help-echo (git-modeline--state-mark-tooltip stat)
               'display
               `(image :type xpm
                       :data ,(format img color)
                       :ascent center)))
 
-(defun git--state-decoration-dispatch(stat)
-  (if (functionp git-state-modeline-decoration)
-      (funcall git-state-modeline-decoration stat)))
+(defun git-modeline--decoration-dispatch (stat)
+  "Render the state symbol STAT with `git-modeline-decoration'."
+  (if (functionp git-modeline-decoration)
+      (funcall git-modeline-decoration stat)))
 
-(defun git--install-state-mark-modeline (stat)
-  (push `(git--state-mark-modeline
-          ,(git--state-decoration-dispatch stat))
+(defun git-modeline--install-state-mark (stat)
+  "Prepend the mark for the state symbol STAT to `mode-line-format'."
+  (push `(git-modeline--state-mark
+          ,(git-modeline--decoration-dispatch stat))
         mode-line-format)
   )
 
-(defun git--uninstall-state-mark-modeline ()
+(defun git-modeline--uninstall-state-mark ()
+  "Remove our mark from `mode-line-format' in the current buffer."
   (setq mode-line-format
         (delq nil (mapcar #'(lambda (mode)
                               (unless (eq (car-safe mode)
-                                          'git--state-mark-modeline)
+                                          'git-modeline--state-mark)
                                 mode))
                    mode-line-format)))
   )
 
-(defun git--update-state-mark (stat)
-  (git--uninstall-state-mark-modeline)
-  (git--install-state-mark-modeline stat))
+(defun git-modeline--update-state-mark (stat)
+  "Refresh the mode line mark so that it shows the state symbol STAT."
+  (git-modeline--uninstall-state-mark)
+  (git-modeline--install-state-mark stat))
 
 (provide 'git-modeline)
+
+;;; git-modeline.el ends here

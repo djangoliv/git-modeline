@@ -45,15 +45,15 @@ Toggle the dot on or off interactively with `M-x git-modeline-mode`.
 
 ## Customization
 
-`git-state-modeline-decoration` controls how the state is rendered.
-Pick one with `M-x customize-variable RET git-state-modeline-decoration`:
+`git-modeline-decoration` controls how the state is rendered.
+Pick one with `M-x customize-variable RET git-modeline-decoration`:
 
 | Value                                 | Look                             |
 |---------------------------------------|----------------------------------|
-| `git-state-decoration-large-dot`      | large filled dot (default)       |
-| `git-state-decoration-small-dot`      | small filled dot                 |
-| `git-state-decoration-letter`         | single status letter (U/M/A/…)   |
-| `git-state-decoration-colored-letter` | same, colored                    |
+| `git-modeline-decoration-large-dot`      | large filled dot (default)       |
+| `git-modeline-decoration-small-dot`      | small filled dot                 |
+| `git-modeline-decoration-letter`         | single status letter (U/M/A/…)   |
+| `git-modeline-decoration-colored-letter` | same, colored                    |
 | `nil`                                 | no decoration                    |
 
 You can also set it to any function of one argument (the state symbol)

@@ -56,6 +56,9 @@ Pick one with `M-x customize-variable RET git-modeline-decoration`:
 | `git-modeline-decoration-colored-letter` | same, colored                    |
 | `nil`                                 | no decoration                    |
 
+On a terminal, where images cannot be displayed, both dot variants fall
+back to the colored status letter automatically.
+
 You can also set it to any function of one argument (the state symbol)
 that returns a string suitable for `mode-line-format`.
 

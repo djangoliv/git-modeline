@@ -336,15 +336,22 @@ static char * data[] = {
 Must remain non-nil: `mode-line-format' evaluates each `(SYMBOL . VALUE)'
 cell and only renders VALUE when SYMBOL's value is non-nil.")
 
+(defun git-modeline--dot-displayable-p ()
+  "Return non-nil if the current frame can display the XPM dot."
+  (and (display-graphic-p) (image-type-available-p 'xpm)))
+
 (defun git-modeline--state-mark-dot (color stat img)
   "Return a mode line image built from the XPM template IMG.
-COLOR fills the dot and STAT is used for the tooltip."
-  (propertize "    "
-              'help-echo (git-modeline--state-mark-tooltip stat)
-              'display
-              `(image :type xpm
-                      :data ,(format img color)
-                      :ascent center)))
+COLOR fills the dot and STAT is used for the tooltip.  On a terminal,
+where no image can be shown, fall back to the colored status letter."
+  (if (not (git-modeline--dot-displayable-p))
+      (git-modeline-decoration-colored-letter stat)
+    (propertize "    "
+                'help-echo (git-modeline--state-mark-tooltip stat)
+                'display
+                `(image :type xpm
+                        :data ,(format img color)
+                        :ascent center))))
 
 (defun git-modeline--decoration-dispatch (stat)
   "Render the state symbol STAT with `git-modeline-decoration'."

@@ -12,8 +12,13 @@ colored dot at the beginning of Emacs' modeline.
 | yellow       | staged   | Staged changes ready to commit                    |
 | blue         | added    | New file added to the index                       |
 | red          | deleted  | Removed from the working tree                     |
-| purple       | unmerged | Conflict during merge                             |
+| purple       | unmerged | Merge conflict — see the note below                |
 | gray         | unknown  | Untracked file inside a git repo                  |
+
+**Note on `unmerged`.** That state is not reached at the moment: for a
+conflicted file `git diff --raw HEAD` reports `M`, so a merge conflict
+currently shows up as `modified` (tomato). The state and its face exist
+for the day the conflict detection is added.
 
 Each state has its own face — `git-modeline-uptodate`,
 `git-modeline-modified`, `git-modeline-staged`, `git-modeline-added`,
@@ -59,7 +64,9 @@ are picked up too:
   `git add`, `git reset` or commit run from a terminal;
 - `magit-post-refresh-hook` catches the same operations run from Magit.
 
-Set `git-modeline-watch-index` to nil to disable the watches, and
+Set `git-modeline-watch-index` to nil to disable the watches — it is
+read the first time a repository is seen, so toggle `git-modeline-mode`
+off and on to apply a change to repositories already watched. Set
 `git-modeline-refresh-delay` to change how long index writes are
 coalesced (0.5s by default). `M-x git-modeline-refresh` refreshes every
 buffer by hand.

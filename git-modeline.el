@@ -69,11 +69,15 @@
   :group 'vc
   :prefix "git-modeline-")
 
+(defcustom git-modeline-executable "git"
+  "Name of, or path to, the git executable."
+  :type 'string
+  :group 'git-modeline)
+
 ;;-----------------------------------------------------------------------------
 ;; Internal variables.
 ;;-----------------------------------------------------------------------------
 
-(defvar git-modeline-executable "git" "Name of, or path to, the git executable.")
 (defconst git-modeline--reg-status  "\\([A-Z?]\\)")
 (defconst git-modeline--reg-blank   "[\t\0 ]+")
 (defconst git-modeline--reg-eof     "\0")

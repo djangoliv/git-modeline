@@ -5,6 +5,7 @@
 
 ;; Author: djangoliv <olivier.giorgis@quantstack.net>
 ;; Maintainer: djangoliv <olivier.giorgis@quantstack.net>
+;; Assisted-by: Claude:claude-opus-5
 ;; URL: https://github.com/djangoliv/git-modeline
 ;; Version: 0.1
 ;; Package-Requires: ((emacs "26.1"))

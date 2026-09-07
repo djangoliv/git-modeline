@@ -89,6 +89,17 @@
 ;; Low-level execution functions.
 ;;-----------------------------------------------------------------------------
 
+(defvar git-modeline--executable-checked nil
+  "Last value of `git-modeline-executable' found to be runnable.")
+
+(defun git-modeline--executable-p ()
+  "Return non-nil if `git-modeline-executable' can be run.
+The answer is remembered so that the lookup does not run for every
+visited file, and redone whenever the option changes."
+  (or (equal git-modeline--executable-checked git-modeline-executable)
+      (when (executable-find git-modeline-executable)
+        (setq git-modeline--executable-checked git-modeline-executable))))
+
 (defsubst git-modeline--exec (cmd outbuf infile &rest args)
   "Low level function for calling git.
 CMD is the main git subcommand, ARGS are the remaining args.  See
@@ -200,7 +211,8 @@ Unlike a `vc-mode' check, this also matches untracked files."
 
 (defun git-modeline--update ()
   "Update the current's buffer modeline state display."
-  (let ((root (git-modeline--in-repo-p)))
+  (let ((root (and (git-modeline--executable-p)
+                   (git-modeline--in-repo-p))))
     (when root
       (git-modeline--watch-repository root)
       (git-modeline--update-state-mark
@@ -332,6 +344,9 @@ status of the file."
     (add-hook 'after-revert-hook #'git-modeline--update)
     ;; Magit knows when it changed the index; ask it to tell us.
     (add-hook 'magit-post-refresh-hook #'git-modeline-refresh)
+    (unless (git-modeline--executable-p)
+      (message "git-modeline: %s not found in `exec-path', no mark will be shown"
+               git-modeline-executable))
     (git-modeline-refresh))
    (t
     (advice-remove 'vc-after-save #'git-modeline--update)

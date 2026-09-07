@@ -95,4 +95,10 @@ that returns a string suitable for `mode-line-format`.
 - Emacs with `vc`/`vc-git` (built-in)
 - `git` on `$PATH`
 
+If `git` cannot be found, `git-modeline-mode` says so once when it is
+enabled and simply shows no mark, rather than raising an error on every
+file you open. Point `git-modeline-executable` at an absolute path if
+your Emacs starts with a reduced `PATH` — a common case on macOS when
+Emacs is launched from the Finder.
+
 No external Emacs packages.

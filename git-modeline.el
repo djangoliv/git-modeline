@@ -361,8 +361,7 @@ added at the beginning of `mode-line-format'."
                                 git-modeline-decoration-colored-letter)
                  (const :tag "No decoration" nil)
                  (function :tag "Other"))
-  :group 'git-modeline
-)
+  :group 'git-modeline)
 
 (defface git-modeline-uptodate
   '((t :foreground "GreenYellow"))
@@ -526,8 +525,7 @@ where no image can be shown, fall back to the colored status letter."
   "Prepend the mark for the state symbol STAT to `mode-line-format'."
   (push `(git-modeline--state-mark
           ,(git-modeline--decoration-dispatch stat))
-        mode-line-format)
-  )
+        mode-line-format))
 
 (defun git-modeline--uninstall-state-mark ()
   "Remove our mark from `mode-line-format' in the current buffer."
@@ -536,8 +534,7 @@ where no image can be shown, fall back to the colored status letter."
                               (unless (eq (car-safe mode)
                                           'git-modeline--state-mark)
                                 mode))
-                   mode-line-format)))
-  )
+                   mode-line-format))))
 
 (defun git-modeline--update-state-mark (stat)
   "Refresh the mode line mark so that it shows the state symbol STAT."

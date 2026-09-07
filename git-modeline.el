@@ -218,7 +218,7 @@ to nil to rely only on `find-file\=', saving and
 (defcustom git-modeline-refresh-delay 0.5
   "Seconds to wait before refreshing after the git index changed.
 A single git operation writes the index several times; waiting coalesces
-those writes into one refresh."
+those writes into one refresh, and leaves git time to finish."
   :type 'number
   :group 'git-modeline)
 
@@ -242,12 +242,15 @@ With ROOT nil, refresh every buffer visiting a file."
   (force-mode-line-update t))
 
 (defun git-modeline--schedule-refresh (root)
-  "Refresh the buffers under ROOT once Emacs has been idle a moment."
+  "Refresh the buffers under ROOT after `git-modeline-refresh-delay\='.
+A plain timer is used rather than an idle one: the index changes while
+Emacs waits, so an idle timer armed from the notification callback is not
+guaranteed to run."
   (when (timerp git-modeline--refresh-timer)
     (cancel-timer git-modeline--refresh-timer))
   (setq git-modeline--refresh-timer
-        (run-with-idle-timer git-modeline-refresh-delay nil
-                             #'git-modeline-refresh root)))
+        (run-with-timer git-modeline-refresh-delay nil
+                        #'git-modeline-refresh root)))
 
 (defconst git-modeline--index-files '("index" "index.lock" "HEAD")
   "Names, in the git directory, whose change can change a file status.")

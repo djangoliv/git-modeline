@@ -236,7 +236,10 @@ With ROOT nil, refresh every buffer visiting a file."
     (with-current-buffer buffer
       (when (and buffer-file-name
                  (or (null root) (file-in-directory-p buffer-file-name root)))
-        (git-modeline--update)))))
+        (git-modeline--update))))
+  ;; Buffers refreshed from a timer are not necessarily the current one:
+  ;; ask for their mode line to be redrawn.
+  (force-mode-line-update t))
 
 (defun git-modeline--schedule-refresh (root)
   "Refresh the buffers under ROOT once Emacs has been idle a moment."
@@ -246,12 +249,23 @@ With ROOT nil, refresh every buffer visiting a file."
         (run-with-idle-timer git-modeline-refresh-delay nil
                              #'git-modeline-refresh root)))
 
+(defconst git-modeline--index-files '("index" "index.lock" "HEAD")
+  "Names, in the git directory, whose change can change a file status.")
+
 (defun git-modeline--index-event-p (event)
-  "Return non-nil if file notification EVENT touches the git index."
-  (let ((action (nth 1 event))
-        (file (nth 2 event)))
-    (and (memq action '(created changed renamed attribute-changed))
-         (member (file-name-nondirectory file) '("index" "HEAD")))))
+  "Return non-nil if file notification EVENT touches the git index.
+Both names carried by EVENT are checked: git does not write the index in
+place, it writes `index.lock\=' and renames it over `index\=', and a
+`renamed\=' event holds the old name in third position and the new one
+in fourth."
+  (and (memq (nth 1 event)
+             '(created changed renamed renamed-from renamed-to
+                       attribute-changed))
+       (cl-some (lambda (file)
+                  (and (stringp file)
+                       (member (file-name-nondirectory file)
+                               git-modeline--index-files)))
+                (list (nth 2 event) (nth 3 event)))))
 
 (defun git-modeline--git-dir (root)
   "Return the absolute git directory of the repository at ROOT, or nil.
